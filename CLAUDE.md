@@ -8,6 +8,7 @@ Writeups e ferramentas de rooms do TryHackMe. Cada room fica na sua pasta em `ro
 room/<nome>/
 ├── README.md          # writeup: recon, vulnerabilidade, exploração, flag
 ├── investigacao.md    # documento de investigação (ver METODOLOGIA.md)
+├── scans/             # output bruto do nmap (-oN) e outras ferramentas — git-ignored
 └── tools/
     ├── .env.example    # template do IP do alvo (copiar para .env)
     ├── .env            # IP real da instância — git-ignored, muda a cada run da room
@@ -26,12 +27,15 @@ tools-general/           # ferramentas/payloads reutilizáveis entre rooms (ver 
 
 ## Metodologia
 
-Antes de testar qualquer room ou projeto novo, seguir sempre [METODOLOGIA.md](METODOLOGIA.md): nmap → visualização/curl → documento de investigação → directory enumeration → API/endpoints, atualizando o documento de investigação a cada descoberta.
+Antes de testar qualquer room ou projeto novo, seguir sempre [METODOLOGIA.md](METODOLOGIA.md): WHOIS + DNS (dig) → Reconhecimento ativo básico (ping, traceroute/mtr, browser DevTools, telnet/nc) → Scanning (nmap) → Enumeration (directory enumeration, API enumeration, documento de investigação) → Vulnerability testing (IDOR, reset de senha, upload, etc.) → Exploitation (shell/RCE) → Privilege Escalation (Metasploit local_exploit_suggester) → Relatório final ([RELATORIO-TEMPLATE.md](RELATORIO-TEMPLATE.md)).
+
+Para ser guiado etapa a etapa sem que nada seja executado por ti, usa o prompt em [MENTOR-SOCRATICO.md](MENTOR-SOCRATICO.md) numa conversa à parte: ele só pergunta e sugere o próximo passo, esperando a tua confirmação a cada etapa.
 
 ## Convenções
 
 - Todo script de step lê o IP do alvo via `_common.sh` (a partir de `tools/.env`), com fallback para argumento posicional — nunca hardcode IP.
 - `.env` nunca é commitado (está no `.gitignore`); só `.env.example` fica no repo.
+- Todo scan de nmap usa `-oN <ficheiro>` para gravar o output; `room/*/scans/` é git-ignored (contém o IP real da instância).
 - Dependências Python instalam-se numa venv local em `tools/.venv` (evita `externally-managed-environment` no macOS/Homebrew).
 - READMEs em português, com secções numeradas (Recon → Enumeração → Vulnerabilidade → Exploração → Flag → Lições).
 

@@ -2,25 +2,77 @@
 
 Convenção a seguir sempre que se testa uma room ou projeto novo. Objetivo: nunca saltar etapas e manter tudo registado num documento de investigação por alvo.
 
-## Etapa 1 — Reconhecimento
+## Terminologia
 
-1. **Nmap** — `nmap -sCV <IP_ALVO>`
+O nome correto (indústria/CTF) para a fase de recolha de dados sobre o alvo é **Enumeration** — não "reconhecimento" isoladamente. As fases seguidas aqui são:
+
+1. **Reconhecimento passivo** — WHOIS e DNS (dig): dados públicos do alvo sem tocar nele diretamente.
+2. **Reconhecimento ativo básico** — ping, traceroute/mtr, browser DevTools, telnet/netcat: primeiro contacto direto com o alvo, ainda com ferramentas simples, antes do nmap.
+3. **Scanning** — nmap: descobre portas/serviços/versões.
+4. **Enumeration** (Etapa 1) — aprofunda cada serviço encontrado: banners, diretórios, API/endpoints, bases de dados. É aqui que se constrói o documento de investigação.
+5. **Vulnerability testing** (Etapa 2) — testar classes de falha específicas sobre o que a Enumeration mapeou.
+6. **Exploitation** (Etapa 3) — transformar a falha confirmada em acesso (shell, RCE, etc.).
+
+## Etapa 1 — Enumeration
+
+1. **WHOIS** — `whois <IP_ALVO_ou_domínio>`
+   Passo passivo, correr antes/em paralelo ao nmap. Para domínio: revela registrar, dono, datas de registo/expiração, nameservers, contactos — pode apontar outros domínios/subdomínios do mesmo dono. Para IP: revela o dono do bloco/ASN e o provedor de hosting, útil para saber se o alvo está numa cloud (AWS/Azure/GCP) ou infraestrutura própria.
+   Em rooms de CTF o IP costuma ser interno/CGNAT (o whois não devolve nada útil) — não perder tempo aqui se for o caso, mas correr sempre primeiro para confirmar. Já em alvos reais/bug bounty, este passo é obrigatório antes de tudo o resto.
+   Registar no documento de investigação: registrar, dono, ASN/provedor, nameservers e qualquer domínio relacionado encontrado.
+
+2. **DNS (dig)** — só relevante quando há domínio (não só IP):
+   ```bash
+   dig <dominio>              # registo A por omissão
+   dig <dominio> ANY          # todos os registos
+   dig <dominio> MX           # servidores de e-mail
+   dig <dominio> TXT          # SPF/DKIM/verificações — às vezes vaza infraestrutura
+   dig <dominio> NS           # nameservers
+   dig axfr @<ns> <dominio>   # tentar zone transfer (raramente aberto, mas vale testar)
+   dig -x <IP>                # reverse lookup
+   ```
+   `dig` é a ferramenta preferida (output mais limpo, mostra TTL, mais fiável para scripting); `nslookup <dominio>` existe como alternativa, mas só usar se `dig` não estiver disponível (ex.: Windows sem instalar nada extra) ou por compatibilidade com documentação antiga.
+   Registar no documento de investigação: registos A/MX/TXT/NS relevantes e qualquer subdomínio ou serviço de terceiros (ex.: provedor de e-mail) que apareça.
+
+3. **Reconhecimento ativo básico** — ferramentas simples antes do nmap, dão uma primeira noção do alvo:
+   - **Ping** — `ping -c 10 <IP_ALVO>` (Linux/macOS) ou `ping -n 10 <IP_ALVO>` (Windows); `ping -6`/`ping6` para IPv6. Confirma que o alvo está vivo e o TTL da resposta dá pista do SO (~64 = Linux, ~128 = Windows, ~255 = rede/appliance — descontar cada hop do traceroute).
+   - **Traceroute / mtr** — `traceroute <IP_ALVO>` (Linux/macOS), `tracert <IP_ALVO>` (Windows), `traceroute -6`/`traceroute6` para IPv6, ou `mtr <IP_ALVO>` para monitorização em tempo real. Mapeia os hops até ao alvo e ajuda a identificar filtragem/firewalls no caminho.
+   - **Browser + DevTools** — abrir o serviço HTTP no navegador e inspecionar (`Ctrl+Shift+I` no Linux/Windows, `Option+Command+I` no macOS): headers de resposta, ficheiros JavaScript servidos, detalhes do certificado TLS. Muitas vezes revela a stack/tecnologia antes mesmo do nmap terminar.
+   - **Telnet / Netcat** — banner grabbing manual porta a porta:
+     ```bash
+     nc <IP_ALVO> <PORTA>          # cliente — grab de banner, testar porta
+     nc -lvnp <PORTA>              # servidor — usado depois no reverse shell (Etapa 3)
+     nc -6 <IP_ALVO> <PORTA>       # IPv6
+     telnet <IP_ALVO> <PORTA>      # legado — só quando nc não está disponível
+     curl -I http://<IP_ALVO>      # preferir a nc/telnet para banner HTTP (mais seguro/flexível)
+     ```
+     `nc`/`curl` são preferíveis a `telnet` para banner HTTP; `telnet` fica só para compatibilidade com serviços legados ou docs antigas.
+   - Registar no documento de investigação: TTL/SO inferido, hops relevantes do traceroute, achados do DevTools (tecnologia, certificado) e banners obtidos por porta.
+
+4. **Scanning (Nmap)** — `nmap -sV -sC -oN scan.txt <IP_ALVO>` (ou `-sCV`, equivalente)
    Descobre portas abertas, versões de serviços, e normalmente já revela também bases de dados e outras aplicações a correr (ex.: MySQL, Redis, SMB, etc.). Tudo o que aparecer aqui vai para o documento de investigação, não só o serviço web.
+   Usar sempre `-oN <ficheiro>` para gravar o output em disco — poupa tempo em relatórios e permite voltar atrás sem correr o scan outra vez. Nos scripts deste repo (`steps/1_nmap.sh`) isto já é automático: grava em `room/<nome>/scans/nmap.txt`.
 
-2. **Visualização manual + curl**
-   Abrir no navegador o(s) serviço(s) HTTP encontrados. Em paralelo, `curl -I` / `curl -v` para ver headers, banners e redirects que o navegador esconde.
+5. **Criar/atualizar o documento de investigação**
+   Depois do scanning e da inspeção manual (passos 1-4), registar tudo o que já se sabe (ver template abaixo).
 
-3. **Criar/atualizar o documento de investigação**
-   Depois do nmap e da inspeção manual, registar tudo o que já se sabe (ver template abaixo).
-
-4. **Directory Enumeration** — `ffuf` / `gobuster`
+6. **Directory Enumeration** — `ffuf` / `gobuster`
    Procurar diretórios e ficheiros escondidos. Atualizar o documento de investigação com o que for encontrado (novas rotas, ficheiros de config, painéis, etc.).
 
-5. **Procurar API e endpoints**
+7. **API Enumeration**
    Verificar se existe API (`/api`, `/graphql`, Swagger/OpenAPI, etc.) e mapear os endpoints encontrados.
 
-6. **Atualizar o documento de investigação continuamente**
+8. **Atualizar o documento de investigação continuamente**
    Cada nova descoberta (vulnerabilidade, credencial, versão, endpoint) entra no documento assim que é confirmada — não só no fim.
+
+9. **Searchsploit** — pesquisar exploits conhecidos para cada serviço/versão identificado até aqui, antes de passar à Etapa 2:
+   ```bash
+   searchsploit <serviço> <versão>
+   # ex.: searchsploit php 8.1.0
+   # ex.: searchsploit apache 2.4.49
+   ```
+   Correr para cada versão de serviço encontrada no nmap (e no banner/curl). Um resultado exato de versão costuma ser exploit direto — vale mais a pena confirmar isso primeiro do que ir logo caçar falhas manualmente na Etapa 2.
+   `searchsploit -x <caminho>` mostra o código do exploit; `searchsploit -m <caminho>` copia-o para a pasta atual.
+   Guardar no documento de investigação qualquer exploit relevante encontrado (título, Exploit-DB ID, caminho local).
 
 ## Etapa 2 — Busca de falhas
 
@@ -84,7 +136,41 @@ Quando o bypass de upload (item 9 da Etapa 2) confirmar execução de código, o
      ```
    - Confirmar a shell interativa recebida no listener (`whoami`, `id`).
 
-5. **Registar no documento de investigação**: caminho do web shell, comandos confirmados, utilizador obtido (tipicamente `www-data`/`apache`, sem privilégios), e ficheiros sensíveis já lidos. A escalada de privilégios a partir daqui fica para uma etapa própria, fora do âmbito desta.
+5. **Registar no documento de investigação**: caminho do web shell, comandos confirmados, utilizador obtido (tipicamente `www-data`/`apache`, sem privilégios), e ficheiros sensíveis já lidos.
+
+## Etapa 4 — Escalada de privilégios
+
+Nem todo acesso inicial já vem com privilégios máximos. O exploit (via Metasploit ou não) dá o acesso com os poderes do processo/utilizador que foi comprometido (ex.: `www-data`, `webmaster`) — a escalada a root/SYSTEM é um passo à parte, não automático.
+
+Quando o acesso vier de uma sessão do **Metasploit** e não for já root:
+
+1. **Colocar a sessão atual em segundo plano** — na shell ativa, `Ctrl+Z` e confirmar com `y`/`yes`. O Metasploit guarda a sessão (`Backgrounding session 1...`).
+
+2. **Carregar o Local Exploit Suggester**:
+   ```
+   use post/multi/recon/local_exploit_suggester
+   ```
+
+3. **Apontar para a sessão a analisar** (normalmente `1`):
+   ```
+   set SESSION 1
+   ```
+
+4. **Correr a análise**:
+   ```
+   run
+   ```
+   O módulo testa dezenas de vulnerabilidades locais conhecidas e devolve uma lista dos exploits que provavelmente funcionam para virar root/SYSTEM naquela máquina.
+
+5. **Escolher e correr um dos exploits sugeridos** (`use <exploit sugerido>`, `set SESSION 1`, `run`) e confirmar o novo utilizador (`getuid`/`id`).
+
+6. **Registar no documento de investigação**: utilizador inicial, exploit de privesc usado, utilizador final obtido.
+
+> Lembrete: isto é uma ferramenta de automação da busca, não uma garantia — se nada da lista funcionar, volta à enumeração manual do sistema (kernel, SUID, cron jobs, sudo -l, etc.).
+
+## Etapa 5 — Relatório final
+
+Com o `investigacao.md` completo, o pentest termina com um relatório apresentável — não é o mesmo documento da investigação (esse é o rascunho de trabalho; o relatório é o entregável). Usar o template em [RELATORIO-TEMPLATE.md](RELATORIO-TEMPLATE.md): capa, sumário executivo, tabela de vulnerabilidades por severidade, e uma secção detalhada (descrição, passos de exploração, recomendação) por vulnerabilidade encontrada.
 
 ## Documento de investigação
 
@@ -96,6 +182,26 @@ Um ficheiro `investigacao.md` por room/projeto, em `room/<nome>/investigacao.md`
 ## Alvo
 - IP:
 - Domínio(s):
+
+## WHOIS
+- Registrar:
+- Dono / organização:
+- ASN / provedor de hosting:
+- Nameservers:
+- Domínios/subdomínios relacionados:
+
+## DNS (dig)
+- A:
+- MX:
+- TXT:
+- NS:
+- Zone transfer (axfr) funcionou?:
+
+## Reconhecimento ativo básico
+- Ping (TTL / SO inferido):
+- Traceroute/mtr (hops relevantes):
+- Browser DevTools (tecnologia, certificado):
+- Banners via telnet/nc (porta → banner):
 
 ## Portas e serviços (nmap)
 | Porta | Serviço | Versão |
@@ -116,6 +222,11 @@ Um ficheiro `investigacao.md` por room/projeto, em `room/<nome>/investigacao.md`
 ## API / Endpoints
 -
 
+## Exploits conhecidos (searchsploit)
+| Serviço/Versão | Exploit encontrado | Exploit-DB ID |
+|----------------|---------------------|----------------|
+|                |                     |                |
+
 ## Testes de falhas (Etapa 2)
 | Tipo | Onde foi testado | Resultado |
 |------|-------------------|-----------|
@@ -129,6 +240,13 @@ Um ficheiro `investigacao.md` por room/projeto, em `room/<nome>/investigacao.md`
 - Utilizador obtido:
 - Reverse shell (IP:porta):
 - Ficheiros sensíveis lidos:
+
+## Escalada de privilégios (Etapa 4)
+- Utilizador inicial:
+- local_exploit_suggester rodado? (S/N):
+- Exploits sugeridos:
+- Exploit de privesc usado:
+- Utilizador final obtido:
 
 ## Vulnerabilidades identificadas
 -
