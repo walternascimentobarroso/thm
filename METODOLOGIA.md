@@ -55,16 +55,34 @@ O nome correto (indústria/CTF) para a fase de recolha de dados sobre o alvo é 
 5. **Criar/atualizar o documento de investigação**
    Depois do scanning e da inspeção manual (passos 1-4), registar tudo o que já se sabe (ver template abaixo).
 
-6. **Directory Enumeration** — `ffuf` / `gobuster`
-   Procurar diretórios e ficheiros escondidos. Atualizar o documento de investigação com o que for encontrado (novas rotas, ficheiros de config, painéis, etc.).
+6. **Content discovery — ficheiros convencionais** (correr **antes** do ffuf)
+   Web servers expõem por convenção ficheiros que muitas vezes revelam mais do que o dono pretendia. Verificar manualmente é rápido, silencioso e poupa fuzzing — deve ser o primeiro passo de descoberta de conteúdo, antes do brute-force.
+   ```bash
+   tools-general/content-discovery/check-files.sh <IP_ou_URL_ALVO>
+   ```
+   O script faz `curl` aos ficheiros mais úteis e imprime o `robots.txt`/`sitemap.xml` na íntegra:
+   - **`robots.txt`** — a lista de `Disallow:` são diretórios que o dono não quer indexados (ex.: `/staff-portal`, `/admin`). É só uma guideline para bots, **não** um controlo de acesso: os caminhos continuam acessíveis diretamente e servem de mapa de sítios interessantes.
+   - **`sitemap.xml`** (e `sitemap_index.xml`) — ao contrário do robots, lista as páginas que o dono *quer* indexadas; às vezes inclui páginas de staging, conteúdo antigo ou URLs difíceis de alcançar pela navegação normal.
+   - **`/.well-known/security.txt`**, **`humans.txt`** — contactos/nomes da equipa (úteis para user enumeration).
+   - **`.git/HEAD`**, **`.env`**, **`.htaccess`**, **`.DS_Store`** — fonte/segredos/config potencialmente expostos (aprofundar na Etapa 2, item 7).
+   - **Headers** `Server` / `X-Powered-By` — confirmam a stack.
+   Registar no documento de investigação os caminhos revelados pelo robots/sitemap e qualquer ficheiro sensível encontrado. Os caminhos são pistas — testar cada um diretamente no browser.
 
-7. **API Enumeration**
+7. **Directory Enumeration** — `ffuf` / `gobuster`
+   Para o que *não* está listado no robots/sitemap: procurar diretórios e ficheiros escondidos por brute-force. É a parte *automated* do content discovery (o item 6 é a parte manual).
+   ```bash
+   tools-general/directory-enumeration/gobuster-dir.sh <IP_ou_URL_ALVO>
+   ```
+   O gobuster tem três modos: **`dir`** (diretórios/ficheiros — coberto pelo script), **`dns`** (subdomínios) e **`vhost`** (virtual hosts no mesmo IP). Ver os comandos de `dns`/`vhost` em [tools-general/directory-enumeration/README.md](tools-general/directory-enumeration/README.md). A qualidade da wordlist é crítica — o SecLists (`Discovery/Web-Content/common.txt`, `directory-list-2.3-medium.txt`) cobre a maioria dos casos.
+   Atualizar o documento de investigação com o que for encontrado (novas rotas, ficheiros de config, painéis, subdomínios, etc.).
+
+8. **API Enumeration**
    Verificar se existe API (`/api`, `/graphql`, Swagger/OpenAPI, etc.) e mapear os endpoints encontrados.
 
-8. **Atualizar o documento de investigação continuamente**
+9. **Atualizar o documento de investigação continuamente**
    Cada nova descoberta (vulnerabilidade, credencial, versão, endpoint) entra no documento assim que é confirmada — não só no fim.
 
-9. **Searchsploit** — pesquisar exploits conhecidos para cada serviço/versão identificado até aqui, antes de passar à Etapa 2:
+10. **Searchsploit** — pesquisar exploits conhecidos para cada serviço/versão identificado até aqui, antes de passar à Etapa 2:
    ```bash
    searchsploit <serviço> <versão>
    # ex.: searchsploit php 8.1.0
@@ -215,6 +233,12 @@ Um ficheiro `investigacao.md` por room/projeto, em `room/<nome>/investigacao.md`
 - Servidor:
 - Versão:
 - Headers relevantes:
+
+## Content discovery (ficheiros convencionais)
+- robots.txt (Disallow / caminhos revelados):
+- sitemap.xml (páginas listadas):
+- .well-known/security.txt / humans.txt:
+- .git / .env / .htaccess expostos?:
 
 ## Directory enumeration
 -

@@ -22,12 +22,14 @@ room/<nome>/
     └── *-exploit.py     # exploit(s) usado(s) na room
 
 tools-general/           # ferramentas/payloads reutilizáveis entre rooms (ver tools-general/README.md)
-└── upload-bypass/       # payloads para testar upload de ficheiros (test.txt, phpinfo.phtml, shell.phtml)
+├── content-discovery/       # check-files.sh — robots.txt, sitemap.xml, .git, .env, headers (Etapa 1 item 6)
+├── directory-enumeration/   # gobuster-dir.sh — brute-force de diretórios/subdomínios/vhosts (Etapa 1 item 7)
+└── upload-bypass/           # payloads para testar upload de ficheiros (test.txt, phpinfo.phtml, shell.phtml)
 ```
 
 ## Metodologia
 
-Antes de testar qualquer room ou projeto novo, seguir sempre [METODOLOGIA.md](METODOLOGIA.md): WHOIS + DNS (dig) → Reconhecimento ativo básico (ping, traceroute/mtr, browser DevTools, telnet/nc) → Scanning (nmap) → Enumeration (directory enumeration, API enumeration, documento de investigação) → Vulnerability testing (IDOR, reset de senha, upload, etc.) → Exploitation (shell/RCE) → Privilege Escalation (Metasploit local_exploit_suggester) → Relatório final ([RELATORIO-TEMPLATE.md](RELATORIO-TEMPLATE.md)).
+Antes de testar qualquer room ou projeto novo, seguir sempre [METODOLOGIA.md](METODOLOGIA.md): WHOIS + DNS (dig) → Reconhecimento ativo básico (ping, traceroute/mtr, browser DevTools, telnet/nc) → Scanning (nmap) → Enumeration (content discovery, directory enumeration, API enumeration, documento de investigação) → Vulnerability testing (IDOR, reset de senha, upload, etc.) → Exploitation (shell/RCE) → Privilege Escalation (Metasploit local_exploit_suggester) → Relatório final ([RELATORIO-TEMPLATE.md](RELATORIO-TEMPLATE.md)).
 
 Para ser guiado etapa a etapa sem que nada seja executado por ti, usa o prompt em [MENTOR-SOCRATICO.md](MENTOR-SOCRATICO.md) numa conversa à parte: ele só pergunta e sugere o próximo passo, esperando a tua confirmação a cada etapa.
 
